@@ -95,15 +95,27 @@ class ProjectInfo:
 BuildConfig = namedtuple('BuildConfig', ['msbuild_name', 'bazel_name'])
 PlatformConfig = namedtuple('PlatformConfig', ['msbuild_name', 'bazel_name'])
 
+def _get_bazel_output_path():
+    def parse(output):
+        for line in output.splitlines():
+            (key, value) = line.split(": ", maxsplit=1)
+            yield (key.strip(), value.strip())
+
+    paths = Struct()
+    output = subprocess.check_output((BAZEL, "info", "bazel-bin", "output_path"), encoding="utf-8", errors="replace")
+    for (key, value) in parse(output):
+        if key == 'bazel-bin':
+            paths.bin = value
+        elif key == 'output_path':
+            paths.out = value
+    return paths
+
 class Configuration:
     def __init__(self, args):
         self.workspace_root = os.path.abspath('.')  # TODO
         self.output_path    = os.path.abspath(args.output)
-
-        self.paths = Struct()
+        self.paths = _get_bazel_output_path()
         self.paths.workspace_root = self.workspace_root
-        self.paths.bin = os.path.join(self.workspace_root, 'bazel-bin')
-        self.paths.out = os.path.join(self.workspace_root, 'bazel-out')
 
         self._setup_env()
         self._build_target_list(args)
@@ -156,11 +168,6 @@ class Configuration:
             if kind in kinds:
                 labels.append(label)
         return labels
-
-    @property
-    def bin_path(self):
-        """Path to the bazel-bin directory of the current workspace."""
-        return os.path.join(self.workspace_root, 'bazel-bin')
 
     def output_path_for_package(self, package):
         """Path to the output directory for files generated for the given package."""
@@ -215,7 +222,7 @@ def run_aspect(cfg):
 
 def read_info(cfg, target):
     """Reads the generated msbuild info file for the given target."""
-    info_dict = json.load(open(os.path.join(cfg.bin_path, target.info_path)))
+    info_dict = json.load(open(os.path.join(cfg.paths.bin, target.info_path)))
     return ProjectInfo(target, info_dict)
 
 def _msb_nmake_output(target, rel_paths):

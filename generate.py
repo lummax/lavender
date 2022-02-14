@@ -439,6 +439,7 @@ def generate_projects(cfg):
 def generate_solution(cfg, project_infos):
     with open(os.path.join(SCRIPT_DIR, 'templates', 'solution.sln')) as f:
         template = f.read()
+    _makedirs(cfg.output_path)
     sln_filename = os.path.join(cfg.output_path, cfg.solution_name+'.sln')
     content = template.format(
         projects=_sln_projects(project_infos),

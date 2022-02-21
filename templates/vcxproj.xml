@@ -13,7 +13,7 @@
     <Keyword>MakeFileProj</Keyword>
     <UseHostCompilerIfAvailable>false</UseHostCompilerIfAvailable>
     {nmake_output}
-    <OutDir>{rel_paths.out}\$(BazelCfgDirname)\bin\{target.label.package_path}\</OutDir>
+    <OutDir>{cfg.paths.out}\$(BazelCfgDirname)\bin\{target.label.package_path}\</OutDir>
     {target_name_ext}
   </PropertyGroup>
 
@@ -36,7 +36,7 @@
 
   <!-- Hack to get most includes working -->
   <PropertyGroup>
-    <IncludePath>{rel_paths.workspace_root};$(IncludePath)</IncludePath>
+    <IncludePath>{cfg.paths.workspace};$(IncludePath)</IncludePath>
   </PropertyGroup>
 
   <ImportGroup Label="ExtensionSettings">
@@ -73,12 +73,12 @@
     <Message Text="NMakePreprocessorDefinitions = $(NMakePreprocessorDefinitions)" />
     <Exec Command="&quot;{cfg.bazel_path}&quot; build $(BazelCfgOpts) {target.label.absolute}"
           Outputs="{outputs}"
-          WorkingDirectory="{rel_paths.workspace_root}" />
+          WorkingDirectory="{cfg.paths.workspace}" />
   </Target>
 
   <Target Name="Clean">
     <Exec Command="&quot;{cfg.bazel_path}&quot; clean $(BazelCfgOpts)"
-          WorkingDirectory="{rel_paths.workspace_root}" />
+          WorkingDirectory="{cfg.paths.workspace}" />
   </Target>
 
   <!-- Override PrepareForBuild so it doesn't try to create OutDir and interfere with bazel. -->

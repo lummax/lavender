@@ -11,6 +11,7 @@ import locale
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import typing
@@ -513,7 +514,6 @@ def generate_projects(cfg: Configuration):
 def generate_solution(cfg: Configuration, project_infos):
     with open(SCRIPT_DIR / "templates" / "solution.sln") as f:
         template = f.read()
-    cfg.output_path.mkdir(exist_ok=True, parents=True)
     sln_filename = cfg.output_path / (cfg.solution_name + ".sln")
     content = template.format(
         projects=_sln_projects(project_infos),
@@ -525,7 +525,7 @@ def generate_solution(cfg: Configuration, project_infos):
         out.write(content)
 
 
-def main(argv):
+def main():
     parser = argparse.ArgumentParser(
         description="Generates Visual Studio project files from Bazel projects."
     )
@@ -554,6 +554,10 @@ def main(argv):
     )
     args = parser.parse_args()
 
+    if args.output.exists():
+        shutil.rmtree(args.output)
+    args.output.mkdir(exist_ok=True, parents=True)
+
     cfg = Configuration(args)
 
     run_aspect(cfg)
@@ -562,4 +566,4 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()

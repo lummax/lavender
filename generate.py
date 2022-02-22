@@ -1,8 +1,8 @@
 """Generates Visual Studio project files."""
 
-from __future__ import division, print_function, unicode_literals
 from collections import namedtuple, OrderedDict
 import argparse
+import collections
 import dataclasses
 import errno
 import itertools
@@ -13,7 +13,6 @@ import pathlib
 import re
 import shutil
 import subprocess
-import sys
 import typing
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
@@ -41,6 +40,10 @@ class Label:
     @property
     def absolute(self):
         return (self.repo or "") + "//" + self.package + ":" + self.name
+
+    @property
+    def project_name(self):
+        return self.name.replace("/", "-").replace("\\", "-")
 
     @property
     def package_path(self):
@@ -347,7 +350,7 @@ def _sln_project(project):
     return 'Project("{type_guid}") = "{name}", "{package}\\{name}.vcxproj", "{guid}"\nEndProject'.format(
         guid=project.guid,
         type_guid=PROJECT_TYPE_GUID,
-        name=project.label.name,
+        name=project.label.project_name,
         package=project.label.package,
     )
 
@@ -482,9 +485,11 @@ def generate_projects(cfg: Configuration):
     config_properties = _msb_cfg_properties(cfg)
 
     project_infos = []
+    by_name = collections.defaultdict(list)
     for target in cfg.targets:
         info = read_info(cfg, Label(target))
         project_infos.append(info)
+        by_name[info.label.name].append(info.label.absolute)
 
         project_dir = cfg.output_path / info.label.package
         content = template.format(
@@ -509,6 +514,9 @@ def generate_projects(cfg: Configuration):
         ) as out:
             out.write(filters_content)
 
+    for (key, value) in by_name.items():
+        if len(value) > 1:
+            print(key, value)
     return project_infos
 
 

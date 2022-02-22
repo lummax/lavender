@@ -5,6 +5,7 @@ from collections import namedtuple, OrderedDict
 import argparse
 import dataclasses
 import errno
+import itertools
 import json
 import locale
 import os
@@ -12,6 +13,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import typing
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 BAZEL = os.environ.get("BAZEL", "bazel")
@@ -85,7 +87,7 @@ class ProjectInfo:
     def defines_joined(self):
         return ";".join(self._cc["defines"]) if self._cc else ""
 
-    def include_dirs_joined(self, cfg):
+    def include_dirs_joined(self, cfg: "Configuration"):
         cc = self._cc
         if not cc:
             return ""
@@ -104,7 +106,13 @@ class ProjectInfo:
         return os.path.normpath(os.path.join(cfg.paths.workspace, *path))
 
 
-BuildConfig = namedtuple("BuildConfig", ["msbuild_name", "bazel_name"])
+@dataclasses.dataclass
+class BuildConfig:
+    msbuild_name: str
+    bazel_name: str
+    bazel_flags: typing.Sequence[str]
+
+
 PlatformConfig = namedtuple("PlatformConfig", ["msbuild_name", "bazel_name"])
 
 
@@ -149,9 +157,9 @@ class Configuration:
         self.solution_name = args.solution or os.path.basename(os.getcwd())
 
         self.build_configs = [
-            BuildConfig("Fastbuild", "fastbuild"),
-            BuildConfig("Debug", "dbg"),
-            BuildConfig("Release", "opt"),
+            BuildConfig("Fastbuild", "fastbuild", args.fastbuild_flags),
+            BuildConfig("Debug", "dbg", args.dbg_flags),
+            BuildConfig("Release", "opt", args.opt_flags),
         ]
         self.platforms = [PlatformConfig("x64", "x64_windows")]
         self.user_config_names = args.config or []
@@ -222,7 +230,7 @@ class Configuration:
         return os.path.normpath(path)
 
 
-def run_aspect(cfg):
+def run_aspect(cfg: Configuration):
     """Invokes bazel on our aspect to generate target info."""
     subprocess.check_call(
         [
@@ -242,7 +250,7 @@ def read_info(cfg: Configuration, target):
     return ProjectInfo(target, info_dict)
 
 
-def _msb_nmake_output(target, cfg):
+def _msb_nmake_output(target, cfg: Configuration):
     if not target.output_file:
         return ""
     return (
@@ -346,7 +354,7 @@ def _sln_projects(projects):
     return "\n".join([_sln_project(project) for project in projects])
 
 
-def _sln_cfgs(cfg):
+def _sln_cfgs(cfg: Configuration):
     lines = []
     for build_config in cfg.build_configs:
         for platform in cfg.platforms:
@@ -381,7 +389,7 @@ def _sln_project_cfgs(cfg: Configuration, projects):
     return "\n\t\t".join(lines)
 
 
-def _msb_project_cfgs(cfg):
+def _msb_project_cfgs(cfg: Configuration):
     configs = []
     for build_config in cfg.build_configs:
         for platform in cfg.platforms:
@@ -397,18 +405,23 @@ def _msb_project_cfgs(cfg):
     return "".join(configs)
 
 
-def _msb_cfg_properties(cfg):
+def _msb_cfg_properties(cfg: Configuration):
     props = []
-    user_config = "".join(" --config=" + name for name in cfg.user_config_names)
     for build_config in cfg.build_configs:
+        bazel_flags = " ".join(
+            itertools.chain(
+                build_config.bazel_flags,
+                (f"--config={name}" for name in cfg.user_config_names),
+            )
+        )
         for platform in cfg.platforms:
             props.append(
                 r"""
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='{cfg.msbuild_name}|{platform.msbuild_name}'">
-    <BazelCfgOpts>-c {cfg.bazel_name}{user_config}</BazelCfgOpts>
+    <BazelCfgOpts>{bazel_flags}</BazelCfgOpts>
     <BazelCfgDirname>{platform.bazel_name}-{cfg.bazel_name}</BazelCfgDirname>
   </PropertyGroup>""".format(
-                    cfg=build_config, platform=platform, user_config=user_config
+                    cfg=build_config, platform=platform, bazel_flags=bazel_flags
                 )
             )
     return "\n".join(props)
@@ -458,7 +471,7 @@ def _generate_project_filters(filters_template, cfg: Configuration, info):
     )
 
 
-def generate_projects(cfg):
+def generate_projects(cfg: Configuration):
     with open(SCRIPT_DIR / "templates" / "vcxproj.xml") as f:
         template = f.read()
     with open(SCRIPT_DIR / "templates" / "vcxproj.filters.xml") as f:
@@ -530,12 +543,16 @@ def main(argv):
         type=str,
         help="Solution name [default: current directory name]",
     )
+    for mode in ("fastbuild", "dbg", "opt"):
+        parser.add_argument(
+            f"--{mode}-flags", type=lambda x: x.split(" "), default=["-c", mode]
+        )
     parser.add_argument(
         "--config",
         action="append",
         help="Additional --config option to pass to bazel; may be used multiple times",
     )
-    args = parser.parse_args(argv[1:])
+    args = parser.parse_args()
 
     cfg = Configuration(args)
 

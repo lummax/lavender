@@ -247,7 +247,8 @@ def run_aspect(cfg: Configuration):
 
 def read_info(cfg: Configuration, target):
     """Reads the generated msbuild info file for the given target."""
-    info_dict = json.load(open(os.path.join(cfg.paths.bin, target.info_path)))
+    with open(cfg.paths.bin / target.info_path) as fob:
+        info_dict = json.load(fob)
     return ProjectInfo(target, info_dict)
 
 
